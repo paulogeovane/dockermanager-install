@@ -76,7 +76,11 @@ if [ ! -f go.mod ] && [ "${DM_COMPILAR:-}" = "1" ]; then
     ok "código em $FONTE"
 fi
 
-[ -f go.mod ] || die "rode a partir da raiz do projeto (onde está o go.mod)."
+# Com binário publicado, não há código por perto — e não precisa haver. A
+# exigência de go.mod só vale para quem pediu compilação.
+if [ "${DM_COMPILAR:-}" = "1" ]; then
+    [ -f go.mod ] || die "rode a partir da raiz do projeto (onde está o go.mod)."
+fi
 
 # ─── Docker ───────────────────────────────────────────────────────────────
 msg "Docker"
