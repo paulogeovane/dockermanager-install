@@ -15,11 +15,17 @@
 #   DM_HOST=painel.seudominio.com.br   domínio a usar em vez do nip.io
 #   DM_SEM_PUBLICAR=1                  não sobe o proxy nem emite certificado
 #   DM_COMPILAR=1                      compila em vez de baixar o binário
+#   DM_VERSAO=v0.1.0                   instala uma versão específica em vez da última
 #   GITHUB_TOKEN=ghp_...               só para clonar o código privado
 #
 set -euo pipefail
 
-BIN=/usr/local/bin/dockermanager
+# O binário mora em /opt, num diretório do usuário do serviço: é o que permite
+# ao painel se atualizar sozinho sem rodar como root. O link em /usr/local/bin
+# é só para o comando existir no PATH.
+BIN_DIR=/opt/dockermanager
+BIN=$BIN_DIR/dockermanager
+LINK=/usr/local/bin/dockermanager
 CONF_DIR=/etc/dockermanager
 CONF="$CONF_DIR/dm.env"
 DATA_DIR=/var/lib/dockermanager
@@ -142,8 +148,13 @@ esac
 DISTRIBUICAO=${DM_DISTRIBUICAO:-https://github.com/paulogeovane/dockermanager-install}
 BAIXOU=0
 
+mkdir -p "$BIN_DIR"
 if [ -n "$ARQ" ] && [ "${DM_COMPILAR:-}" != "1" ]; then
-    BASE="$DISTRIBUICAO/releases/latest/download"
+    if [ -n "${DM_VERSAO:-}" ]; then
+        BASE="$DISTRIBUICAO/releases/download/$DM_VERSAO"
+    else
+        BASE="$DISTRIBUICAO/releases/latest/download"
+    fi
 
     if curl -fsSL --retry 3 -o "$BIN.novo" "$BASE/dockermanager-linux-$ARQ" 2>/dev/null; then
         # Conferir o checksum ANTES de trocar: um download truncado vira um
@@ -197,6 +208,9 @@ fi
 
 # Só troca no fim: uma falha antes daqui não pode deixar o serviço sem binário.
 mv "$BIN.novo" "$BIN"
+# Instalação antiga tinha o binário direto em /usr/local/bin; vira link.
+[ -L "$LINK" ] || rm -f "$LINK"
+ln -sfn "$BIN" "$LINK"
 ok "$BIN ($(du -h "$BIN" | cut -f1))"
 
 # ─── Usuário e diretórios ─────────────────────────────────────────────────
@@ -211,7 +225,7 @@ fi
 usermod -aG docker "$SERVICE_USER"
 
 mkdir -p "$DATA_DIR" "$PROJECTS_DIR" "$CONF_DIR"
-chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR" "$PROJECTS_DIR"
+chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR" "$PROJECTS_DIR" "$BIN_DIR"
 chmod 750 "$DATA_DIR"
 ok "$DATA_DIR e $PROJECTS_DIR"
 
@@ -290,11 +304,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dockermanager
+ExecStart=/opt/dockermanager/dockermanager
 EnvironmentFile=/etc/dockermanager/dm.env
 
+# Restart=always é também o mecanismo de atualização: o painel troca o
+# binário e encerra; o systemd o traz de volta já na versão nova. Assim não
+# precisa de privilégio para chamar systemctl.
 Restart=always
-RestartSec=5s
+RestartSec=2s
 
 User=dockermanager
 Group=docker
@@ -308,7 +325,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/dockermanager
+ReadWritePaths=/var/lib/dockermanager /opt/dockermanager
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
