@@ -321,7 +321,7 @@ User=dockermanager
 Group=docker
 
 # Encerramento gracioso: o SIGTERM inicia o shutdown do servidor HTTP, e o
-# tempo generoso evita cortar um deploy ou um dump de backup pela metade.
+# tempo generoso evita cortar um deploy pela metade.
 KillSignal=SIGTERM
 TimeoutStopSec=120
 
